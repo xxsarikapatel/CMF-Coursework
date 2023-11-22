@@ -1,0 +1,513 @@
+pip install yfinance==0.2.28
+
+import csv
+
+# Specify the file path
+file_path = r'C:\Users\w2019695\Desktop\New folder\VOD.csv'
+
+# Check if the file exists before trying to open it
+try:
+    with open(file_path, 'r') as file:
+        reader = csv.reader(file)
+        for row in reader:
+            print(row)
+except FileNotFoundError:
+    print(f"File not found: {file_path}")
+except Exception as e:
+    print(f"An error occurred: {e}")
+
+# Importing required libraries
+import csv
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Specify the file path
+file_path = r'C:\Users\w2019695\Desktop\New folder\VOD.csv'
+
+# Read the data into a pandas DataFrame
+data = []
+try:
+    with open(file_path, 'r') as file:
+        reader = csv.reader(file)
+        data = list(reader)
+except FileNotFoundError:
+    print(f"File not found: {file_path}")
+except Exception as e:
+    print(f"An error occurred: {e}")
+
+# Convert the list into a DataFrame
+df = pd.DataFrame(data[1:], columns=data[0])
+
+# Convert 'Date' to datetime and 'Close' to float
+df['Date'] = pd.to_datetime(df['Date'])
+df['Close'] = df['Close'].astype(float)
+
+# Calculate daily returns
+returns = df['Close'].pct_change()
+
+# Drop missing values
+returns = returns.dropna()
+
+# Calculate the annualized average return
+avg_returns_annual = returns.mean() * 252
+
+# Calculate the annualized standard deviation
+std_dev_annual = returns.std() * np.sqrt(252)
+
+print('The annualised average return over two years is %f' % avg_returns_annual)
+print('The annualised standard deviation over two years is %f' % std_dev_annual)
+
+# Plot the equity price
+plt.figure(figsize=(10,7))
+plt.plot(df['Date'], df['Close'])
+plt.title('Equity Price Movement Over Two Years')
+plt.xlabel('Date')
+plt.ylabel('Price')
+plt.show()
+
+import numpy as np
+
+def european_binomial(S, K, r, v, t, n, option_type='call'):
+    """
+    S: Initial stock price
+    K: Strike price
+    r: Risk-free rate
+    v: Volatility
+    t: Time to expiration
+    n: Number of steps in the tree
+    """
+    # Calculated parameters
+    delta_t = t / n
+    u = np.exp(v * np.sqrt(delta_t))
+    d = 1 / u
+    p = (np.exp(r * delta_t) - d) / (u - d)
+    
+    # Initialize our f_{i,j} tree with zeros
+    tree = np.zeros([n+1, n+1])
+    
+    # Generate asset prices at each node of the tree
+    for i in range(n+1):
+        for j in range(i+1):
+            tree[j, i] = S * (d**j) * (u**(i-j))
+
+    # Generate option prices backwards
+    if option_type=='call':
+        tree[:, n] = np.maximum(np.zeros(n+1), (tree[:, n]-K))
+    else:
+        tree[:, n] = np.maximum(np.zeros(n+1), (K-tree[:, n]))
+        
+    for i in np.arange(n-1, -1, -1):
+        for j in np.arange(0, i+1):
+            tree[j, i] = np.exp(-r * delta_t) * (p * tree[j, i+1] + (1-p) * tree[j+1, i+1])
+            
+    return tree[0,0]
+
+# Test the function
+S = 100
+K = 105
+r = 0.05
+v = 0.2
+t = 1
+n = 100
+
+print('Call Option Price: ', european_binomial(S, K, r, v, t, n, 'call'))
+print('Put Option Price: ', european_binomial(S, K, r, v, t, n, 'put'))
+
+import numpy as np
+
+def american_binomial(S, K, r, v, t, n, option_type='call'):
+    """
+    S: Initial stock price
+    K: Strike price
+    r: Risk-free rate
+    v: Volatility
+    t: Time to expiration
+    n: Number of steps in the tree
+    """
+    # Calculated parameters
+    delta_t = t / n
+    u = np.exp(v * np.sqrt(delta_t))
+    d = 1 / u
+    p = (np.exp(r * delta_t) - d) / (u - d)
+    
+    # Initialize our f_{i,j} tree with zeros
+    tree = np.zeros([n+1, n+1])
+    
+    # Generate asset prices at each node of the tree
+    for i in range(n+1):
+        for j in range(i+1):
+            tree[j, i] = S * (d**j) * (u**(i-j))
+
+    # Generate option prices backwards
+    if option_type=='call':
+        tree[:, n] = np.maximum(np.zeros(n+1), (tree[:, n]-K))
+        for i in np.arange(n-1, -1, -1):
+            for j in np.arange(0, i+1):
+                tree[j, i] = np.maximum((np.exp(-r * delta_t) * 
+                                         (p * tree[j, i+1] + (1-p) * tree[j+1, i+1])), 
+                                        tree[j,i] - K)
+    else:
+        tree[:, n] = np.maximum(np.zeros(n+1), (K-tree[:, n]))
+        for i in np.arange(n-1, -1, -1):
+            for j in np.arange(0, i+1):
+                tree[j, i] = np.maximum((np.exp(-r * delta_t) * 
+                                         (p * tree[j, i+1] + (1-p) * tree[j+1, i+1])), 
+                                        K - tree[j,i])
+            
+    return tree[0,0]
+
+# Test the function
+S = 100
+K = 105
+r = 0.05
+v = 0.2
+t = 1
+n = 100
+
+print('American Call Option Price: ', american_binomial(S, K, r, v, t, n, 'call'))
+print('American Put Option Price: ', american_binomial(S, K, r, v, t, n, 'put'))
+
+import numpy as np
+
+def monte_carlo_option_price(S, K, r, v, t, num_simulations, option_type='call'):
+    """
+    S: Initial stock price
+    K: Strike price
+    r: Risk-free rate
+    v: Volatility
+    t: Time to expiration
+    num_simulations: Number of simulations to run
+    """
+    # Simulate asset price using geometric Brownian motion
+    asset_price_at_t = S * np.exp((r - 0.5 * v**2) * t + v * np.sqrt(t) * np.random.standard_normal(num_simulations))
+    
+    # Calculate payoff
+    if option_type == 'call':
+        payoff = np.maximum(asset_price_at_t - K, 0)
+    else:
+        payoff = np.maximum(K - asset_price_at_t, 0)
+    
+    # Discount payoff back to today and return average
+    option_price = np.exp(-r * t) * np.mean(payoff)
+    
+    return option_price
+
+# Test the function
+S = 100
+K = 105
+r = 0.05
+v = 0.2
+t = 1
+num_simulations = 10000
+
+print('European Call Option Price (Monte Carlo): ', monte_carlo_option_price(S, K, r, v, t, num_simulations, 'call'))
+print('European Put Option Price (Monte Carlo): ', monte_carlo_option_price(S, K, r, v, t, num_simulations, 'put'))
+
+# Parameters
+S = 100
+K = 105
+r = 0.05
+v = 0.2
+t = 1
+n = 100
+num_simulations = 10000
+
+# Calculate option prices
+binomial_call_price = european_binomial(S, K, r, v, t, n, 'call')
+binomial_put_price = european_binomial(S, K, r, v, t, n, 'put')
+monte_carlo_call_price = monte_carlo_option_price(S, K, r, v, t, num_simulations, 'call')
+monte_carlo_put_price = monte_carlo_option_price(S, K, r, v, t, num_simulations, 'put')
+
+# Print comparison
+print('Method\t\t\tCall Option Price\tPut Option Price')
+print('---------------------------------------------------------')
+print(f'European Binomial\t{binomial_call_price:.4f}\t\t\t{binomial_put_price:.4f}')
+print(f'Monte Carlo\t\t{monte_carlo_call_price:.4f}\t\t\t{monte_carlo_put_price:.4f}')
+
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.stats import norm
+
+def delta(S, K, r, v, t):
+    d1 = (np.log(S / K) + (r + 0.5 * v**2) * t) / (v * np.sqrt(t))
+    delta = norm.cdf(d1)
+    return delta
+
+# Test the function
+S = np.linspace(50,150,100)
+K = 105
+r = 0.05
+v = 0.2
+t = 1
+
+Delta = delta(S, K, r, v, t)
+
+plt.figure()
+plt.plot(S, Delta)
+plt.title('Delta')
+plt.xlabel('Underlying Asset Price')
+plt.ylabel('Delta')
+plt.grid(True)
+plt.show()
+
+def delta_call(S, K, r, v, t):
+    d1 = (np.log(S / K) + (r + 0.5 * v**2) * t) / (v * np.sqrt(t))
+    delta = norm.cdf(d1)
+    return delta
+
+def delta_put(S, K, r, v, t):
+    return delta_call(S, K, r, v, t) - 1
+
+Delta_Call = delta_call(S, K, r, v, t)
+Delta_Put = delta_put(S, K, r, v, t)
+
+plt.figure()
+plt.plot(S, Delta_Call, label='Call')
+plt.plot(S, Delta_Put, label='Put')
+plt.title('Delta')
+plt.xlabel('Underlying Asset Price')
+plt.ylabel('Delta')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+from mpl_toolkits.mplot3d import Axes3D
+
+S = np.linspace(50,150,100)
+K = np.linspace(50,150,100)
+
+S,K = np.meshgrid(S,K)
+Delta_Call = delta_call(S, K, r, v, t)
+Delta_Put = delta_put(S, K, r, v, t)
+
+fig = plt.figure(figsize=(10,6))
+ax = fig.add_subplot(111, projection='3d')
+ax.plot_surface(S, K, Delta_Call, color='b', alpha=0.5)
+ax.plot_surface(S, K, Delta_Put, color='r', alpha=0.5)
+plt.title('Delta')
+plt.xlabel('Underlying Asset Price')
+plt.ylabel('Strike Price')
+plt.show()
+
+def gamma(S, K, r, v, t):
+    d1 = (np.log(S / K) + (r + 0.5 * v**2) * t) / (v * np.sqrt(t))
+    gamma = norm.pdf(d1) / (S * v * np.sqrt(t))
+    return gamma
+
+# Test the function
+Gamma = gamma(S, K, r, v, t)
+
+plt.figure()
+plt.plot(S, Gamma)
+plt.title('Gamma')
+plt.xlabel('Underlying Asset Price')
+plt.ylabel('Gamma')
+plt.grid(True)
+plt.show()
+
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.stats import norm
+
+def gamma(S, K, r, v, t):
+    d1 = (np.log(S / K) + (r + 0.5 * v**2) * t) / (v * np.sqrt(t))
+    gamma = norm.pdf(d1) / (S * v * np.sqrt(t))
+    return gamma
+
+# Test the function
+S = np.linspace(50,150,100)
+K = 105
+r = 0.05
+v = 0.2
+t = 1
+
+Gamma = gamma(S, K, r, v, t)
+
+plt.figure()
+plt.plot(S, Gamma)
+plt.title('Gamma')
+plt.xlabel('Underlying Asset Price')
+plt.ylabel('Gamma')
+plt.grid(True)
+plt.show()
+
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.stats import norm
+
+def theta_call(S, K, r, v, t):
+    d1 = (np.log(S / K) + (r + 0.5 * v**2) * t) / (v * np.sqrt(t))
+    d2 = d1 - v * np.sqrt(t)
+    theta = -S * norm.pdf(d1) * v / (2 * np.sqrt(t)) - r * K * np.exp(-r * t) * norm.cdf(d2)
+    return theta
+
+def theta_put(S, K, r, v, t):
+    d1 = (np.log(S / K) + (r + 0.5 * v**2) * t) / (v * np.sqrt(t))
+    d2 = d1 - v * np.sqrt(t)
+    theta = -S * norm.pdf(d1) * v / (2 * np.sqrt(t)) + r * K * np.exp(-r * t) * norm.cdf(-d2)
+    return theta
+
+# Test the function
+S = np.linspace(50,150,100)
+K = 105
+r = 0.05
+v = 0.2
+t = 1
+
+Theta_Call = theta_call(S, K, r, v, t)
+Theta_Put = theta_put(S, K, r, v, t)
+
+plt.figure()
+plt.plot(S, Theta_Call, label='Call')
+plt.plot(S, Theta_Put, label='Put')
+plt.title('Theta')
+plt.xlabel('Underlying Asset Price')
+plt.ylabel('Theta')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+from mpl_toolkits.mplot3d import Axes3D
+
+S = np.linspace(50,150,100)
+K = np.linspace(50,150,100)
+
+S,K = np.meshgrid(S,K)
+Theta_Call = theta_call(S, K, r, v, t)
+Theta_Put = theta_put(S, K, r, v, t)
+
+fig = plt.figure(figsize=(10,6))
+ax = fig.add_subplot(111, projection='3d')
+ax.plot_surface(S, K, Theta_Call, color='b', alpha=0.5)
+ax.plot_surface(S, K, Theta_Put, color='r', alpha=0.5)
+plt.title('Theta')
+plt.xlabel('Underlying Asset Price')
+plt.ylabel('Strike Price')
+plt.show()
+
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.stats import norm
+
+def rho_call(S, K, r, v, t):
+    d1 = (np.log(S / K) + (r + 0.5 * v**2) * t) / (v * np.sqrt(t))
+    d2 = d1 - v * np.sqrt(t)
+    rho = K * t * np.exp(-r * t) * norm.cdf(d2)
+    return rho
+
+def rho_put(S, K, r, v, t):
+    d1 = (np.log(S / K) + (r + 0.5 * v**2) * t) / (v * np.sqrt(t))
+    d2 = d1 - v * np.sqrt(t)
+    rho = -K * t * np.exp(-r * t) * norm.cdf(-d2)
+    return rho
+
+# Test the function
+S = np.linspace(50,150,100)
+K = 105
+r = 0.05
+v = 0.2
+t = 1
+
+Rho_Call = rho_call(S, K, r, v, t)
+Rho_Put = rho_put(S, K, r, v, t)
+
+plt.figure()
+plt.plot(S, Rho_Call, label='Call')
+plt.plot(S, Rho_Put, label='Put')
+plt.title('Rho')
+plt.xlabel('Underlying Asset Price')
+plt.ylabel('Rho')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+from mpl_toolkits.mplot3d import Axes3D
+
+S = np.linspace(50,150,100)
+K = np.linspace(50,150,100)
+
+S,K = np.meshgrid(S,K)
+Rho_Call = rho_call(S, K, r, v, t)
+Rho_Put = rho_put(S, K, r, v, t)
+
+fig = plt.figure(figsize=(10,6))
+ax = fig.add_subplot(111, projection='3d')
+ax.plot_surface(S, K, Rho_Call, color='b', alpha=0.5)
+ax.plot_surface(S, K, Rho_Put, color='r', alpha=0.5)
+plt.title('Rho')
+plt.xlabel('Underlying Asset Price')
+plt.ylabel('Strike Price')
+plt.show()
+
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.stats import norm
+
+def vega(S, K, r, v, t):
+    d1 = (np.log(S / K) + (r + 0.5 * v**2) * t) / (v * np.sqrt(t))
+    vega = S * norm.pdf(d1) * np.sqrt(t)
+    return vega
+
+# Test the function
+S = np.linspace(50,150,100)
+K = 105
+r = 0.05
+v = 0.2
+t = 1
+
+Vega = vega(S, K, r, v, t)
+
+plt.figure()
+plt.plot(S, Vega)
+plt.title('Vega')
+plt.xlabel('Underlying Asset Price')
+plt.ylabel('Vega')
+plt.grid(True)
+plt.show()
+
+from mpl_toolkits.mplot3d import Axes3D
+
+S = np.linspace(50,150,100)
+K = np.linspace(50,150,100)
+
+S,K = np.meshgrid(S,K)
+Vega = vega(S, K, r, v, t)
+
+fig = plt.figure(figsize=(10,6))
+ax = fig.add_subplot(111, projection='3d')
+ax.plot_surface(S, K, Vega, color='b', alpha=0.5)
+plt.title('Vega')
+plt.xlabel('Underlying Asset Price')
+plt.ylabel('Strike Price')
+plt.show()
+
+from scipy.stats import norm
+import numpy as np
+
+def black_scholes_greeks(S, K, r, v, t):
+    d1 = (np.log(S / K) + (r + 0.5 * v**2) * t) / (v * np.sqrt(t))
+    d2 = d1 - v * np.sqrt(t)
+
+    delta = norm.cdf(d1)
+    gamma = norm.pdf(d1) / (S * v * np.sqrt(t))
+    vega = S * norm.pdf(d1) * np.sqrt(t)
+    theta = -S * norm.pdf(d1) * v / (2 * np.sqrt(t)) - r * K * np.exp(-r * t) * norm.cdf(d2)
+    rho = K * t * np.exp(-r * t) * norm.cdf(d2)
+
+    return delta, gamma, vega, theta, rho
+
+# Test the function
+S = 100
+K = 105
+r = 0.05
+v = 0.2
+t = 1
+
+delta, gamma, vega, theta, rho = black_scholes_greeks(S, K, r, v, t)
+print('Delta: ', delta)
+print('Gamma: ', gamma)
+print('Vega: ', vega)
+print('Theta: ', theta)
+print('Rho: ', rho)
+
